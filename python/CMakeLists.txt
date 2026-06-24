@@ -34,11 +34,18 @@ add_custom_command(
 add_custom_command(
   TARGET ${CUR_TARGET_NAME}
   POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omniHandPro25Can> ${PYTHON_PKG_DIR}/agibot_hand/
-  COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/
-  COMMAND ${CMAKE_COMMAND} -E create_symlink libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/libusbcanfd.so.1
-  COMMAND ${CMAKE_COMMAND} -E create_symlink libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/libusbcanfd.so
-)
+  COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:omniHandPro25Can> ${PYTHON_PKG_DIR}/agibot_hand/)
+
+# Only the x86 ZLG backend ships the prebuilt libusbcanfd; under SocketCAN there
+# is no such library, so do not copy it into the (aarch64) Python package.
+if(CanfdDevice EQUAL 1)
+  add_custom_command(
+    TARGET ${CUR_TARGET_NAME}
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/
+    COMMAND ${CMAKE_COMMAND} -E create_symlink libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/libusbcanfd.so.1
+    COMMAND ${CMAKE_COMMAND} -E create_symlink libusbcanfd.so.1.0.10 ${PYTHON_PKG_DIR}/agibot_hand/libusbcanfd.so)
+endif()
 
 add_custom_target(
   create_python_pkg ALL

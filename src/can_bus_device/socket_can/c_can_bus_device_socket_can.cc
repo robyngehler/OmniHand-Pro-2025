@@ -11,6 +11,7 @@
 #include "c_can_bus_device_socket_can.h"
 
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 
 #include <fcntl.h>
@@ -54,9 +55,12 @@ int CanBusDeviceSocketCan::OpenDevice() {
   int flags = fcntl(fd_sock_, F_GETFL, 0);
   fcntl(fd_sock_, F_SETFL, flags | O_NONBLOCK);
 
-  /*指定can0设备，获取设备索引*/
+  /* Interface from OMNIHAND_SOCKETCAN_IFACE env var, default can0. */
   struct ifreq ifr {};
-  strcpy(ifr.ifr_name, "can0");
+  const char* env_iface = std::getenv("OMNIHAND_SOCKETCAN_IFACE");
+  const char* iface = (env_iface && env_iface[0] != '\0') ? env_iface : "can0";
+  std::strncpy(ifr.ifr_name, iface, IFNAMSIZ - 1);
+  ifr.ifr_name[IFNAMSIZ - 1] = '\0';
   ioctl(fd_sock_, SIOCGIFINDEX, &ifr);
 
   /*地址*/

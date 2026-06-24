@@ -8,6 +8,21 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 option(BUILD_PYTHON_BINDING "Build Python binding" ON)
 option(BUILD_CPP_EXAMPLES "Build CPP examples" ON)
 
+# --- CAN backend selection (Jetson/aarch64 native SocketCAN) ---------------
+# Defined at the top level so BOTH src/ and python/ subdirectories inherit it
+# (a set() inside src/CMakeLists.txt would not be visible in python/).
+# 1 = ZLG USB-CANFD SDK (x86 only); 2 = SocketCAN (Jetson native).
+set(OMNIHAND_PRO_CAN_BACKEND "SOCKETCAN" CACHE STRING "CAN backend: SOCKETCAN or ZLG")
+set_property(CACHE OMNIHAND_PRO_CAN_BACKEND PROPERTY STRINGS SOCKETCAN ZLG)
+if(OMNIHAND_PRO_CAN_BACKEND STREQUAL "ZLG")
+  set(CanfdDevice 1)
+elseif(OMNIHAND_PRO_CAN_BACKEND STREQUAL "SOCKETCAN")
+  set(CanfdDevice 2)
+else()
+  message(FATAL_ERROR "Unsupported OMNIHAND_PRO_CAN_BACKEND=${OMNIHAND_PRO_CAN_BACKEND}")
+endif()
+message(STATUS "OmniHand Pro CAN backend: ${OMNIHAND_PRO_CAN_BACKEND} (CanfdDevice=${CanfdDevice})")
+
 # Some necessary settings
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,7 +81,14 @@ if(BUILD_PYTHON_BINDING)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(node)
+
+# The vendor node/ is a full ROS2/ament package (rclcpp, rosidl). agx_arm_ctrl
+# owns the hardware session via its own bridge, so we do not build it here; it
+# also cannot be configured by plain cmake/build.sh (needs colcon/ament).
+option(BUILD_VENDOR_NODE "Build the vendor ROS node (unused by agx_arm_ctrl)" OFF)
+if(BUILD_VENDOR_NODE)
+  add_subdirectory(node)
+endif()
 
 
 if(BUILD_PYTHON_BINDING)

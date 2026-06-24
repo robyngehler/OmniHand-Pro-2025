@@ -1,8 +1,9 @@
 # Copyright (c) 2025, Agibot Co., Ltd.
 # OmniHand Pro 2025 SDK is licensed under Mulan PSL v2
 
-#切换基于不同CAN盒和CAN卡的SDK还是socketCAN，1~ZLG周立功的usbcanfd的CAN盒SDK;2~socketCAN
-set(CanfdDevice 1)
+# CanfdDevice is set at the top-level CMakeLists.txt via OMNIHAND_PRO_CAN_BACKEND.
+# (1 = ZLG USB-CANFD x86 SDK, 2 = SocketCAN.) Do not set it here, or it would
+# override the inherited value and force the x86 backend.
 
 file(GLOB MODULE_SOURCES 
   ${CMAKE_CURRENT_SOURCE_DIR}/*.cc 
@@ -20,6 +21,12 @@ add_library(omniHandPro25Can SHARED ${MODULE_SOURCES})
 set_target_properties(omniHandPro25Can PROPERTIES
   INSTALL_RPATH "$ORIGIN"
   BUILD_WITH_INSTALL_RPATH TRUE)
+
+# src/ must be on the include path for BOTH backends: the sources include
+# "kinematics_solver/..." and "can_bus_device/..." relative to here. Upstream
+# only added it inside the ZLG branch, so the SocketCAN build could not find
+# kinematics_solver.h. Add it unconditionally.
+target_include_directories(omniHandPro25Can PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(CanfdDevice EQUAL 1)
   target_compile_definitions(omniHandPro25Can PRIVATE ZLG_USBCANFD_SDK)
@@ -45,5 +52,7 @@ install(FILES export_symbols.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 install(FILES proto.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include)
 install(FILES can_bus_device/c_can_bus_device.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/can_bus_device)
 install(FILES kinematics_solver/kinematics_solver.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/kinematics_solver)
-install(FILES ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
-install(FILES ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so.1.0.10 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+if(CanfdDevice EQUAL 1)
+  install(FILES ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+  install(FILES ${PROJECT_SOURCE_DIR}/thirdParty/usbcanfd_libusb_x64_1.0.10_250328/libusbcanfd.so.1.0.10 DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+endif()
