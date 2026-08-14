@@ -10,9 +10,11 @@
 
 #include "c_can_bus_device_socket_can.h"
 
+#include <chrono>
 #include <cstring>
 #include <cstdlib>
 #include <iostream>
+#include <thread>
 
 #include <fcntl.h>
 #include <linux/can.h>
@@ -122,6 +124,22 @@ void CanBusDeviceSocketCan::RecvFrame() {
     const int ready = poll(&pfd, 1, kRecvPollTimeoutMs);
     if (ready <= 0) {
       continue; /* timeout or interrupted: re-check the interrupt request */
+    }
+
+    /* POLLERR, POLLHUP and POLLNVAL are reported whether or not they were
+     * requested, and they do not clear by themselves. Treating "poll returned
+     * something" as "data is waiting" would put the spin straight back: on a
+     * downed link poll returns immediately, the read fails, and the loop turns
+     * as fast as the CPU allows — during a bus fault, which is when the cycles
+     * are needed for recovery rather than least. */
+    if (pfd.revents & POLLNVAL) {
+      return; /* the descriptor is gone; there is nothing left to receive */
+    }
+    if ((pfd.revents & (POLLERR | POLLHUP)) && !(pfd.revents & POLLIN)) {
+      /* Wait out the same interval poll would have waited, so a persistent
+       * error costs no more CPU than an idle bus and shutdown stays bounded. */
+      std::this_thread::sleep_for(std::chrono::milliseconds(kRecvPollTimeoutMs));
+      continue;
     }
 
     canfd_frame frame{};
