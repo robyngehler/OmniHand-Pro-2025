@@ -18,9 +18,15 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <net/if.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+
+/* How long RecvFrame waits on the socket before re-checking the interrupt
+ * request. It bounds shutdown, nothing else: a frame wakes the poll
+ * immediately, so this does not add receive latency. */
+static constexpr int kRecvPollTimeoutMs = 20;
 
 CanBusDeviceSocketCan::CanBusDeviceSocketCan() {
   /*打开设备*/
@@ -97,8 +103,29 @@ int CanBusDeviceSocketCan::CloseDevice() {
 
 void CanBusDeviceSocketCan::RecvFrame() {
   while (!IsInterruptRequested()) {
+    /* Wait for the socket rather than polling it.
+     *
+     * This loop used to call read() on a non-blocking socket with nothing in
+     * between, so on an idle bus it spun as fast as the CPU allowed: measured at
+     * 100.0 % of one core per hand on a Jetson AGX Orin, with the bus carrying
+     * 25 frames per second. Two hands cost two cores doing nothing.
+     *
+     * The original note here — a blocking read would keep the thread from being
+     * released — is correct, and poll() is the answer to it rather than a reason
+     * to spin: the timeout bounds how long the destructor waits for the join,
+     * while a frame still wakes the thread immediately, so receive latency is
+     * unchanged. The socket deliberately stays non-blocking, so even a spurious
+     * wakeup cannot turn into a blocked read. */
+    struct pollfd pfd {};
+    pfd.fd = fd_sock_;
+    pfd.events = POLLIN;
+    const int ready = poll(&pfd, 1, kRecvPollTimeoutMs);
+    if (ready <= 0) {
+      continue; /* timeout or interrupted: re-check the interrupt request */
+    }
+
     canfd_frame frame{};
-    int ret = read(fd_sock_, &frame, sizeof(frame));  // read接收阻塞式会导致线程无法释放
+    int ret = read(fd_sock_, &frame, sizeof(frame));
     if (ret > 0) {
       CanfdFrame rep{};
       rep.can_id_ = frame.can_id & CAN_EFF_MASK;
